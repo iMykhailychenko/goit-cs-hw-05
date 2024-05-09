@@ -1,9 +1,9 @@
 import argparse
 import asyncio
+import logging
 
 import aiopath
 import aioshutil
-import logging
 from beaupy.spinners import Spinner
 
 format = "%(threadName)s %(asctime)s: %(message)s"

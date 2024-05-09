@@ -1,10 +1,10 @@
-import string
 import asyncio
-from collections import defaultdict, Counter
-from beaupy.spinners import Spinner
 import logging
+import string
+from collections import Counter, defaultdict
 
 import httpx
+from beaupy.spinners import Spinner
 from matplotlib import pyplot as plt
 
 format = "%(threadName)s %(asctime)s: %(message)s"
@@ -13,11 +13,8 @@ logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
 # Отримаємо текст за наданим посиланням
 async def get_text(url):
-    spinner = Spinner(text="Loading text from gutenberg...")
-    spinner.start()
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
-        spinner.stop()
         if response.status_code == 200:
             return response.text
         else:
@@ -48,11 +45,14 @@ async def reduce_function(key_values):
 # Виконаємо пошук і формування списку слів за допомогою MapReduce
 async def map_reduce(url):
     # Отримаємо текст з вебсайту
+    text_spinner = Spinner(text="Loading text from gutenberg...\n")
+    text_spinner.start()
     text = await get_text(url)
+    text_spinner.stop()
     # Запускаємо Мапінг і обробку тексту
 
-    spinner = Spinner(text="Running MapReduce...")
-    spinner.start()
+    count_spinner = Spinner(text="Running MapReduce...\n")
+    count_spinner.start()
     mapped_result = map_function(text)
 
     # Виконаємо Shuffle використовуючи результати Мапінга
@@ -60,10 +60,11 @@ async def map_reduce(url):
 
     # Зберемо разом отримані результати та підрахуємо частоти використання
     reduced_result = await asyncio.gather(
-        *[reduce_function(values) for values in shuffled_words])
+        *[reduce_function(values) for values in shuffled_words]
+    )
 
     # Повернемо результати розрахунків у main
-    spinner.stop()
+    count_spinner.stop()
     return dict(reduced_result)
 
 
@@ -82,10 +83,10 @@ def visualize_top_words(result, top_n=10):
     plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         url = "https://gutenberg.net.au/ebooks01/0100021.txt"
         res = asyncio.run(map_reduce(url))
         visualize_top_words(res)
     except KeyboardInterrupt:
-        logging.info('Bye!')
+        logging.info("Bye!")
