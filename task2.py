@@ -2,6 +2,7 @@ import asyncio
 import logging
 import string
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 from beaupy.spinners import Spinner
@@ -11,24 +12,22 @@ format = "%(threadName)s %(asctime)s: %(message)s"
 logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
 
 
-# Отримаємо текст за наданим посиланням
 async def get_text(url):
+    spinner = Spinner(text="Loading text from gutenberg...\n")
+    spinner.start()
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
+        spinner.stop()
         if response.status_code == 200:
-            return response.text
+            return response.text.translate(str.maketrans("", "", string.punctuation))
         else:
             return None
 
 
-# Створимо функцію для видалення пунктуації і асинхронного Мапінгу
-def map_function(text):
-    text.translate(str.maketrans("", "", string.punctuation))
-    words = text.split()
-    return [(word, 1) for word in words]
+def map_function(word):
+    return word, 1
 
 
-# Створимо функцію для виконання Shuffle
 def shuffle_function(mapped_values):
     shuffled = defaultdict(list)
     for key, value in mapped_values:
@@ -36,39 +35,28 @@ def shuffle_function(mapped_values):
     return shuffled.items()
 
 
-# І створимо асинхронну функцію для виконання Reduce
-async def reduce_function(key_values):
+def reduce_function(key_values):
     key, values = key_values
     return key, sum(values)
 
 
-# Виконаємо пошук і формування списку слів за допомогою MapReduce
 async def map_reduce(url):
-    # Отримаємо текст з вебсайту
-    text_spinner = Spinner(text="Loading text from gutenberg...\n")
-    text_spinner.start()
     text = await get_text(url)
-    text_spinner.stop()
-    # Запускаємо Мапінг і обробку тексту
+    
+    spinner = Spinner(text="Running MapReduce...\n")
+    spinner.start()
+    with ThreadPoolExecutor() as executor:
+        mapped_values = list(executor.map(map_function, text))
 
-    count_spinner = Spinner(text="Running MapReduce...\n")
-    count_spinner.start()
-    mapped_result = map_function(text)
+    shuffled_values = shuffle_function(mapped_values)
 
-    # Виконаємо Shuffle використовуючи результати Мапінга
-    shuffled_words = shuffle_function(mapped_result)
+    with ThreadPoolExecutor() as executor:
+        reduced_values = list(executor.map(reduce_function, shuffled_values))
 
-    # Зберемо разом отримані результати та підрахуємо частоти використання
-    reduced_result = await asyncio.gather(
-        *[reduce_function(values) for values in shuffled_words]
-    )
-
-    # Повернемо результати розрахунків у main
-    count_spinner.stop()
-    return dict(reduced_result)
+    spinner.stop()
+    return dict(reduced_values)
 
 
-# Позначимо, що нам потрібні 10 найчастіших слів та побудуємо графік
 def visualize_top_words(result, top_n=10):
     top_words = Counter(result).most_common(top_n)
     # Розділимо дані на слова та їх частоти
